@@ -1,19 +1,30 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { RiYoutubeFill } from 'react-icons/ri'
-import { HiBars3, HiXMark, HiArrowDownTray } from 'react-icons/hi2'
+import { HiBars3, HiXMark } from 'react-icons/hi2'
 
-const navItems = [
-  { name: 'YouTube to MP4', href: '/' },
-  { name: 'YouTube to MP3', href: '/mp3' },
-  { name: 'Shorts Downloader', href: '/shorts' },
-  { name: 'Playlist', href: '/playlist' },
-  { name: 'How It Works', href: '#how-it-works' },
+export type NavTabId = 'mp4' | 'mp3' | 'how-it-works'
+
+interface HeaderProps {
+  activeTab?: NavTabId
+  onSelectTab?: (tab: NavTabId) => void
+}
+
+const navItems: { id: NavTabId; name: string }[] = [
+  { id: 'mp4', name: 'YouTube to MP4' },
+  { id: 'mp3', name: 'YouTube to MP3' },
+  { id: 'how-it-works', name: 'How It Works' },
 ]
 
-const Header = () => {
+const Header = ({ activeTab = 'mp4', onSelectTab }: HeaderProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [activeItem, setActiveItem] = useState('YouTube to MP4')
+
+  const handleNavClick = (tabId: NavTabId) => {
+    if (onSelectTab) {
+      onSelectTab(tabId)
+    }
+    setMobileMenuOpen(false)
+  }
 
   return (
     <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
@@ -22,6 +33,7 @@ const Header = () => {
           {/* Logo */}
           <Link
             to="/"
+            onClick={() => handleNavClick('mp4')}
             className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-lg"
           >
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-sm shadow-red-200">
@@ -37,13 +49,13 @@ const Header = () => {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1 lg:gap-2">
             {navItems.map((item) => {
-              const isActive = activeItem === item.name
+              const isActive = activeTab === item.id
 
               return (
                 <button
-                  key={item.name}
+                  key={item.id}
                   type="button"
-                  onClick={() => setActiveItem(item.name)}
+                  onClick={() => handleNavClick(item.id)}
                   className={`px-3.5 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer ${
                     isActive
                       ? 'text-red-600 bg-red-50 font-semibold'
@@ -55,17 +67,6 @@ const Header = () => {
               )
             })}
           </nav>
-
-          {/* Right Action */}
-          <div className="hidden sm:flex items-center gap-3">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg shadow-sm transition-colors cursor-pointer"
-            >
-              <HiArrowDownTray className="w-4 h-4" />
-              <span>Download</span>
-            </button>
-          </div>
 
           {/* Mobile Menu Button */}
           <div className="flex md:hidden">
@@ -90,16 +91,13 @@ const Header = () => {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-gray-100 bg-white px-4 pt-3 pb-5 space-y-1 shadow-md">
           {navItems.map((item) => {
-            const isActive = activeItem === item.name
+            const isActive = activeTab === item.id
 
             return (
               <button
-                key={item.name}
+                key={item.id}
                 type="button"
-                onClick={() => {
-                  setActiveItem(item.name)
-                  setMobileMenuOpen(false)
-                }}
+                onClick={() => handleNavClick(item.id)}
                 className={`w-full text-left px-3.5 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   isActive
                     ? 'text-red-600 bg-red-50 font-semibold'
@@ -110,17 +108,6 @@ const Header = () => {
               </button>
             )
           })}
-
-          <div className="pt-3">
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors"
-            >
-              <HiArrowDownTray className="w-4 h-4" />
-              <span>Download</span>
-            </button>
-          </div>
         </div>
       )}
     </header>
