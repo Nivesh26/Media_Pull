@@ -2,13 +2,16 @@ import {
   HiShieldCheck,
   HiBolt,
   HiMusicalNote,
-  HiDevicePhoneMobile,
   HiLink,
   HiArrowDownTray,
   HiSparkles,
   HiCheck,
-  HiFilm
+  HiFilm,
+  HiEyeSlash
 } from 'react-icons/hi2'
+import youtubeLogo from '../assets/youtube.svg'
+import instagramLogo from '../assets/instagram.svg'
+import tiktokLogo from '../assets/tiktok.svg'
 
 interface StepItem {
   number: string
@@ -22,69 +25,106 @@ interface StepItem {
 const steps: StepItem[] = [
   {
     number: '01',
-    title: 'Copy & Paste Link',
-    subtitle: 'Grab any video or Short URL directly from YouTube and paste it into the converter box above.',
+    title: 'Copy & Paste Any Link',
+    subtitle: 'Grab any video, Reel, or music URL from YouTube, Instagram, or TikTok and paste it into the search box.',
     icon: HiLink,
     badgeText: 'Instant Detection',
-    actionHint: 'Supports all video links & Shorts',
+    actionHint: 'Supports YouTube, Instagram & TikTok',
   },
   {
     number: '02',
-    title: 'Select MP4 or MP3',
-    subtitle: 'Pick high-definition video (4K, 1080p, 720p) or studio-grade 320kbps audio bitrate.',
+    title: 'Select MP3 or MP4',
+    subtitle: 'Choose high-fidelity 320kbps MP3 audio or crystal-clear MP4 video up to 4K resolution.',
     icon: HiFilm,
     badgeText: 'Zero Quality Loss',
-    actionHint: 'Auto-calculates file size',
+    actionHint: 'Auto-calculates optimal file size',
   },
   {
     number: '03',
-    title: 'Direct Download',
-    subtitle: 'Hit Pull Media to immediately save the converted media file directly to your device with no wait.',
+    title: 'Direct Clean Download',
+    subtitle: 'Hit Pull Media to immediately save original media files directly to your device with zero watermark.',
     icon: HiArrowDownTray,
-    badgeText: 'Full Speed',
-    actionHint: 'No signups or software needed',
+    badgeText: 'No Watermark',
+    actionHint: 'Clean output without logos or overlays',
   },
 ]
 
 const features = [
   {
-    title: '100% Safe & Clean',
-    desc: 'No invasive ads, redirects, or third-party trackers. Pure clean downloads.',
-    icon: HiShieldCheck,
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
-    borderColor: 'border-emerald-100',
-  },
-  {
-    title: 'High-Speed Cloud Engine',
-    desc: 'Powered by distributed servers with zero queues and maximum bandwidth.',
-    icon: HiBolt,
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    borderColor: 'border-amber-100',
+    title: 'No Watermarks Added',
+    desc: 'Download TikTok videos and Instagram Reels without annoying platform watermarks or logos.',
+    icon: HiEyeSlash,
+    color: 'text-rose-600',
+    bg: 'bg-rose-50',
+    borderColor: 'border-rose-100',
   },
   {
     title: 'Lossless 320kbps Audio',
-    desc: 'Crystal-clear sound preservation for audiophiles, podcasts, and study beats.',
+    desc: 'Extract full-frequency studio audio tracks and music from any video stream.',
     icon: HiMusicalNote,
     color: 'text-purple-600',
     bg: 'bg-purple-50',
     borderColor: 'border-purple-100',
   },
   {
-    title: 'Works Everywhere',
-    desc: 'Seamless performance across iPhone, iPad, Android, macOS, and Windows browsers.',
-    icon: HiDevicePhoneMobile,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    borderColor: 'border-blue-100',
+    title: 'High-Speed Cloud Engine',
+    desc: 'Powered by distributed nodes with zero queues and maximum download bandwidth.',
+    icon: HiBolt,
+    color: 'text-amber-600',
+    bg: 'bg-amber-50',
+    borderColor: 'border-amber-100',
   },
+  {
+    title: '100% Safe & Ad-Free',
+    desc: 'Zero spam, malware, or popups. Completely safe across all devices and browsers.',
+    icon: HiShieldCheck,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50',
+    borderColor: 'border-emerald-100',
+  },
+]
+
+const supportedPlatforms = [
+  { name: 'YouTube', type: 'Videos, Shorts & Music', logo: youtubeLogo },
+  { name: 'Instagram', type: 'Reels, Stories & Posts', logo: instagramLogo },
+  { name: 'TikTok', type: 'Videos Without Watermark', logo: tiktokLogo },
 ]
 
 const HowItWorks = () => {
   return (
     <section id="how-it-works" className="w-full py-16 px-4 sm:px-6 lg:px-8 scroll-mt-20">
       <div className="max-w-5xl mx-auto space-y-16">
+        {/* Supported Platforms Strip */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-100 shadow-sm">
+          <div className="text-center space-y-1 mb-6">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-red-600 bg-red-50 px-2.5 py-1 rounded-full border border-red-100/60">
+              Universal Platform Compatibility
+            </span>
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900 pt-2">
+              Pull Media from All Your Favorite Platforms
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {supportedPlatforms.map((plat) => (
+              <div
+                key={plat.name}
+                className="flex items-center gap-3.5 p-4 rounded-2xl bg-gray-50/70 border border-gray-100 hover:bg-gray-50 hover:border-gray-200 transition-colors"
+              >
+                <img
+                  src={plat.logo}
+                  alt={plat.name}
+                  className="w-8 h-8 object-contain shrink-0"
+                />
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-gray-900">{plat.name}</span>
+                  <span className="text-xs text-gray-500 font-normal">{plat.type}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Section Header */}
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-50 text-red-600 text-xs font-semibold tracking-wide uppercase">
@@ -149,7 +189,7 @@ const HowItWorks = () => {
         <div className="space-y-4 pt-4">
           <div className="text-center">
             <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Why Users Choose YoutubePull
+              Why Users Choose MediaPull
             </span>
           </div>
 

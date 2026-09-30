@@ -1,15 +1,53 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   HiArrowDownTray,
   HiXMark,
   HiFilm,
   HiMusicalNote,
   HiCheckCircle,
-  HiArrowPath
+  HiArrowPath,
+  HiExclamationTriangle,
+  HiChevronDown,
+  HiCheck
 } from 'react-icons/hi2'
-import { RiYoutubeFill } from 'react-icons/ri'
+import youtubeLogo from '../assets/youtube.svg'
+import instagramLogo from '../assets/instagram.svg'
+import tiktokLogo from '../assets/tiktok.svg'
 
 type MediaType = 'mp4' | 'mp3'
+type Platform = 'youtube' | 'instagram' | 'tiktok'
+
+interface PlatformInfo {
+  id: Platform
+  name: string
+  logo: string
+  placeholder: string
+  badge: string
+}
+
+const platforms: PlatformInfo[] = [
+  {
+    id: 'youtube',
+    name: 'YouTube',
+    logo: youtubeLogo,
+    placeholder: 'Paste YouTube video or Shorts link here...',
+    badge: '4K & MP3',
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram',
+    logo: instagramLogo,
+    placeholder: 'Paste Instagram Reel, Video, or Post link here...',
+    badge: 'Reels & Stories',
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok',
+    logo: tiktokLogo,
+    placeholder: 'Paste TikTok video link here (No Watermark)...',
+    badge: 'No Watermark',
+  },
+]
 
 interface VideoMetadata {
   title: string
@@ -17,6 +55,7 @@ interface VideoMetadata {
   duration: string
   thumbnail: string
   views: string
+  platform: Platform
 }
 
 interface BodyProps {
@@ -29,14 +68,42 @@ const Body = ({
   onMediaTypeChange
 }: BodyProps) => {
   const [url, setUrl] = useState('')
-  const [internalMediaType, setInternalMediaType] = useState<MediaType>('mp4')
-  
+  const [internalMediaType, setInternalMediaType] = useState<MediaType>('mp3')
+  const [selectedPlatform, setSelectedPlatform] = useState<Platform>('youtube')
+  const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
   const currentMediaType = controlledMediaType ?? internalMediaType
-  const [selectedQuality, setSelectedQuality] = useState('1080p')
+  const [selectedQuality, setSelectedQuality] = useState('320k')
   const [isProcessing, setIsProcessing] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
   const [videoData, setVideoData] = useState<VideoMetadata | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const activePlatformInfo = platforms.find((p) => p.id === selectedPlatform) || platforms[0]
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setPlatformDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Auto-detect platform when url changes
+  useEffect(() => {
+    const trimmed = url.toLowerCase().trim()
+    if (trimmed.includes('instagram.com')) {
+      setSelectedPlatform('instagram')
+    } else if (trimmed.includes('tiktok.com')) {
+      setSelectedPlatform('tiktok')
+    } else if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
+      setSelectedPlatform('youtube')
+    }
+  }, [url])
 
   const handleFormatChange = (type: MediaType) => {
     if (onMediaTypeChange) {
@@ -74,14 +141,17 @@ const Body = ({
   const handleExtract = (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     if (!url.trim()) {
-      setError('Please enter or paste a valid YouTube video URL.')
+      setError(`Please enter or paste a valid ${activePlatformInfo.name} link.`)
       return
     }
 
-    // Basic YouTube URL verification
-    const isYouTubeUrl = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)/i.test(url)
-    if (!isYouTubeUrl && !url.includes('youtube')) {
-      setError('Please enter a valid YouTube link (e.g. https://www.youtube.com/watch?v=...)')
+    const trimmed = url.trim().toLowerCase()
+    const isYouTube = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)/i.test(trimmed) || trimmed.includes('youtube')
+    const isInstagram = trimmed.includes('instagram.com')
+    const isTikTok = trimmed.includes('tiktok.com')
+
+    if (!isYouTube && !isInstagram && !isTikTok) {
+      setError('Please enter a valid link from YouTube, Instagram, or TikTok.')
       return
     }
 
@@ -90,17 +160,38 @@ const Body = ({
     setVideoData(null)
     setDownloadProgress(null)
 
-    // Simulate intelligent metadata fetch
+    // Simulate intelligent metadata fetch based on detected platform
     setTimeout(() => {
       setIsProcessing(false)
-      setVideoData({
-        title: 'Lofi Hip Hop Radio - Beats to Relax/Study to [High Fidelity Audio]',
-        channel: 'Lofi Girl',
-        duration: '3:45',
-        thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=800&q=80',
-        views: '1.4M views'
-      })
-    }, 900)
+      if (isInstagram) {
+        setVideoData({
+          title: 'Sunset Coastal Drive [Instagram Reel HQ]',
+          channel: '@travel_vibes',
+          duration: '0:45',
+          thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
+          views: '420K views',
+          platform: 'instagram'
+        })
+      } else if (isTikTok) {
+        setVideoData({
+          title: 'Viral Dance Choreography & Trend [No Watermark]',
+          channel: '@creator_spotlight',
+          duration: '0:30',
+          thumbnail: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
+          views: '1.2M views',
+          platform: 'tiktok'
+        })
+      } else {
+        setVideoData({
+          title: 'Lofi Hip Hop Radio - Beats to Relax/Study to [High Fidelity Audio]',
+          channel: 'Lofi Girl',
+          duration: '3:45',
+          thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=800&q=80',
+          views: '1.4M views',
+          platform: 'youtube'
+        })
+      }
+    }, 850)
   }
 
   const handleStartDownload = () => {
@@ -122,29 +213,13 @@ const Body = ({
       <div className="max-w-4xl mx-auto">
         {/* Converter Card */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xl shadow-gray-200/40 space-y-6">
-          {/* Format Selector: MP4 vs MP3 */}
+          {/* Format Selector: MP3 vs MP4 */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-4 border-b border-gray-100">
             <div className="text-sm font-semibold text-gray-800">
               Select Output Format:
             </div>
 
             <div className="inline-flex p-1 rounded-xl bg-gray-100/90 border border-gray-200/60 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => handleFormatChange('mp4')}
-                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
-                  currentMediaType === 'mp4'
-                    ? 'bg-white text-red-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                }`}
-              >
-                <HiFilm className="w-4 h-4" />
-                <span>MP4 Video</span>
-                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-600">
-                  4K
-                </span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => handleFormatChange('mp3')}
@@ -160,15 +235,98 @@ const Body = ({
                   Lossless
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleFormatChange('mp4')}
+                className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                  currentMediaType === 'mp4'
+                    ? 'bg-white text-red-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                <HiFilm className="w-4 h-4" />
+                <span>MP4 Video</span>
+                <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-600">
+                  4K
+                </span>
+              </button>
             </div>
           </div>
 
-          {/* URL Input Form */}
+          {/* URL Input Form with Interactive Platform Selector Dropdown */}
           <form onSubmit={handleExtract} className="space-y-3">
             <div className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
               <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-red-500">
-                  <RiYoutubeFill className="w-6 h-6" />
+                {/* Platform Selector Dropdown Trigger Button */}
+                <div ref={dropdownRef} className="absolute inset-y-0 left-0 flex items-center pl-2.5 z-20">
+                  <button
+                    type="button"
+                    onClick={() => setPlatformDropdownOpen(!platformDropdownOpen)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-gray-100/90 hover:bg-gray-200/80 active:bg-gray-200 text-gray-800 transition-colors border border-gray-200/80 cursor-pointer shadow-2xs"
+                    title="Choose Platform"
+                  >
+                    <img
+                      src={activePlatformInfo.logo}
+                      alt={activePlatformInfo.name}
+                      className="w-5 h-5 object-contain"
+                    />
+                    <span className="hidden md:inline text-xs font-semibold">
+                      {activePlatformInfo.name}
+                    </span>
+                    <HiChevronDown
+                      className={`w-3.5 h-3.5 text-gray-500 transition-transform duration-200 ${
+                        platformDropdownOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {platformDropdownOpen && (
+                    <div className="absolute top-full left-2 mt-2 w-64 bg-white rounded-2xl border border-gray-200/80 shadow-2xl p-1.5 space-y-1 z-50">
+                      <div className="text-[10px] uppercase font-bold tracking-wider text-gray-400 px-3 py-1.5">
+                        Select Platform
+                      </div>
+                      {platforms.map((plat) => {
+                        const isSelected = selectedPlatform === plat.id
+                        return (
+                          <button
+                            key={plat.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPlatform(plat.id)
+                              setPlatformDropdownOpen(false)
+                              setError(null)
+                            }}
+                            className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-red-50 text-red-700 font-semibold'
+                                : 'hover:bg-gray-50 text-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <img
+                                src={plat.logo}
+                                alt={plat.name}
+                                className="w-5 h-5 object-contain"
+                              />
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold leading-tight">
+                                  {plat.name}
+                                </span>
+                                <span className="text-[10px] text-gray-400 font-normal">
+                                  {plat.badge}
+                                </span>
+                              </div>
+                            </div>
+                            {isSelected && (
+                              <HiCheck className="w-4 h-4 text-red-600" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <input
@@ -178,12 +336,12 @@ const Body = ({
                     setUrl(e.target.value)
                     if (error) setError(null)
                   }}
-                  placeholder="Paste YouTube link here (e.g. https://www.youtube.com/watch?v=...)"
-                  className="w-full pl-12 pr-10 py-3.5 sm:py-4 bg-gray-50/70 hover:bg-gray-50 focus:bg-white border border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 rounded-2xl text-gray-900 placeholder-gray-400 text-sm sm:text-base outline-none transition-all shadow-inner"
+                  placeholder={activePlatformInfo.placeholder}
+                  className="w-full pl-24 md:pl-36 pr-10 py-3.5 sm:py-4 bg-gray-50/70 hover:bg-gray-50 focus:bg-white border border-gray-200 focus:border-red-500 focus:ring-4 focus:ring-red-100 rounded-2xl text-gray-900 placeholder-gray-400 text-xs sm:text-sm outline-none transition-all shadow-inner"
                 />
 
                 {url && (
-                  <div className="absolute inset-y-0 right-3 flex items-center">
+                  <div className="absolute inset-y-0 right-3 flex items-center z-10">
                     <button
                       type="button"
                       onClick={() => {
@@ -221,7 +379,8 @@ const Body = ({
 
             {error && (
               <p className="text-xs sm:text-sm text-red-600 font-medium pl-1 flex items-center gap-1.5">
-                <span>⚠️</span> {error}
+                <HiExclamationTriangle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>{error}</span>
               </p>
             )}
           </form>
@@ -279,9 +438,22 @@ const Body = ({
                 </div>
 
                 <div className="flex-1 min-w-0 space-y-1">
-                  <span className="inline-block text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-md">
-                    Ready to convert to {currentMediaType.toUpperCase()}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={
+                        videoData.platform === 'instagram'
+                          ? instagramLogo
+                          : videoData.platform === 'tiktok'
+                          ? tiktokLogo
+                          : youtubeLogo
+                      }
+                      alt={videoData.platform}
+                      className="w-4 h-4 object-contain"
+                    />
+                    <span className="inline-block text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-md">
+                      Ready to convert to {currentMediaType.toUpperCase()}
+                    </span>
+                  </div>
                   <h3 className="text-sm sm:text-base font-bold text-gray-900 truncate">
                     {videoData.title}
                   </h3>

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { RiYoutubeFill } from 'react-icons/ri'
-import { HiBars3, HiXMark } from 'react-icons/hi2'
+import { HiBars3, HiXMark, HiArrowDownTray } from 'react-icons/hi2'
 
 export type NavTabId = 'mp4' | 'mp3' | 'how-it-works'
 
@@ -11,12 +10,12 @@ interface HeaderProps {
 }
 
 const navItems: { id: NavTabId; name: string }[] = [
-  { id: 'mp4', name: 'YouTube to MP4' },
-  { id: 'mp3', name: 'YouTube to MP3' },
+  { id: 'mp3', name: 'MP3 Audio' },
+  { id: 'mp4', name: 'MP4 Video' },
   { id: 'how-it-works', name: 'How It Works' },
 ]
 
-const Header = ({ activeTab = 'mp4', onSelectTab }: HeaderProps) => {
+const Header = ({ activeTab = 'mp3', onSelectTab }: HeaderProps) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleNavClick = (tabId: NavTabId) => {
@@ -33,15 +32,15 @@ const Header = ({ activeTab = 'mp4', onSelectTab }: HeaderProps) => {
           {/* Logo */}
           <Link
             to="/"
-            onClick={() => handleNavClick('mp4')}
+            onClick={() => handleNavClick('mp3')}
             className="flex items-center gap-2.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-lg"
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-sm shadow-red-200">
-              <RiYoutubeFill className="text-2xl" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-red-600 via-rose-600 to-amber-600 flex items-center justify-center text-white shadow-sm shadow-red-200">
+              <HiArrowDownTray className="text-xl" />
             </div>
             <div className="flex items-baseline">
               <span className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900">
-                YouTube<span className="text-red-600">Pull</span>
+                Media<span className="text-red-600">Pull</span>
               </span>
             </div>
           </Link>
