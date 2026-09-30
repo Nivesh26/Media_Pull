@@ -23,6 +23,8 @@ interface PlatformInfo {
   logo: string
   placeholder: string
   badge: string
+  disabled?: boolean
+  statusBadge?: string
 }
 
 const platforms: PlatformInfo[] = [
@@ -37,15 +39,19 @@ const platforms: PlatformInfo[] = [
     id: 'instagram',
     name: 'Instagram',
     logo: instagramLogo,
-    placeholder: 'Paste Instagram Reel, Video, or Post link here...',
+    placeholder: 'Instagram support coming soon...',
     badge: 'Reels & Stories',
+    disabled: true,
+    statusBadge: 'Coming Soon',
   },
   {
     id: 'tiktok',
     name: 'TikTok',
     logo: tiktokLogo,
-    placeholder: 'Paste TikTok video link here (No Watermark)...',
+    placeholder: 'TikTok support coming soon...',
     badge: 'No Watermark',
+    disabled: true,
+    statusBadge: 'Coming Soon',
   },
 ]
 
@@ -93,15 +99,11 @@ const Body = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Auto-detect platform when url changes
+  // Keep YouTube active and warn if user enters Instagram/TikTok for now
   useEffect(() => {
     const trimmed = url.toLowerCase().trim()
-    if (trimmed.includes('instagram.com')) {
-      setSelectedPlatform('instagram')
-    } else if (trimmed.includes('tiktok.com')) {
-      setSelectedPlatform('tiktok')
-    } else if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
-      setSelectedPlatform('youtube')
+    if (trimmed.includes('instagram.com') || trimmed.includes('tiktok.com')) {
+      setError('Instagram and TikTok downloads are coming soon! Currently only YouTube is supported.')
     }
   }, [url])
 
@@ -138,7 +140,9 @@ const Body = ({
     { label: '128 kbps', value: '128k', size: '~4.1 MB' },
   ]
 
-  const handleExtract = (e?: React.FormEvent) => {
+  const API_BASE = 'http://localhost:5001/api'
+
+  const handleExtract = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     if (!url.trim()) {
       setError(`Please enter or paste a valid ${activePlatformInfo.name} link.`)
@@ -150,8 +154,13 @@ const Body = ({
     const isInstagram = trimmed.includes('instagram.com')
     const isTikTok = trimmed.includes('tiktok.com')
 
-    if (!isYouTube && !isInstagram && !isTikTok) {
-      setError('Please enter a valid link from YouTube, Instagram, or TikTok.')
+    if (isInstagram || isTikTok) {
+      setError('Instagram & TikTok downloads are coming soon! Currently, only YouTube is supported.')
+      return
+    }
+
+    if (!isYouTube) {
+      setError('Please enter a valid YouTube video or Shorts link.')
       return
     }
 
@@ -160,42 +169,43 @@ const Body = ({
     setVideoData(null)
     setDownloadProgress(null)
 
-    // Simulate intelligent metadata fetch based on detected platform
-    setTimeout(() => {
-      setIsProcessing(false)
-      if (isInstagram) {
-        setVideoData({
-          title: 'Sunset Coastal Drive [Instagram Reel HQ]',
-          channel: '@travel_vibes',
-          duration: '0:45',
-          thumbnail: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
-          views: '420K views',
-          platform: 'instagram'
-        })
-      } else if (isTikTok) {
-        setVideoData({
-          title: 'Viral Dance Choreography & Trend [No Watermark]',
-          channel: '@creator_spotlight',
-          duration: '0:30',
-          thumbnail: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
-          views: '1.2M views',
-          platform: 'tiktok'
-        })
-      } else {
-        setVideoData({
-          title: 'Lofi Hip Hop Radio - Beats to Relax/Study to [High Fidelity Audio]',
-          channel: 'Lofi Girl',
-          duration: '3:45',
-          thumbnail: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=800&q=80',
-          views: '1.4M views',
-          platform: 'youtube'
-        })
+    try {
+      const response = await fetch(`${API_BASE}/info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: url.trim() }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to fetch video information.')
       }
-    }, 850)
+
+      setVideoData(result.data)
+      if (result.data.platform) {
+        setSelectedPlatform(result.data.platform)
+      }
+    } catch (err: any) {
+      console.error(err)
+      setError(err.message || 'Could not connect to the backend downloader service.')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const handleStartDownload = () => {
     setDownloadProgress(0)
+
+    // Trigger direct stream download to browser / PC
+    const downloadUrl = `${API_BASE}/download?url=${encodeURIComponent(url)}&format=${currentMediaType}&quality=${selectedQuality}`
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.setAttribute('download', '')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
     const interval = setInterval(() => {
       setDownloadProgress((prev) => {
         if (prev === null) return 0
@@ -205,7 +215,7 @@ const Body = ({
         }
         return prev + 25
       })
-    }, 350)
+    }, 450)
   }
 
   return (
@@ -289,26 +299,32 @@ const Body = ({
                       </div>
                       {platforms.map((plat) => {
                         const isSelected = selectedPlatform === plat.id
+                        const isDisabled = plat.disabled
+
                         return (
                           <button
                             key={plat.id}
                             type="button"
+                            disabled={isDisabled}
                             onClick={() => {
+                              if (isDisabled) return
                               setSelectedPlatform(plat.id)
                               setPlatformDropdownOpen(false)
                               setError(null)
                             }}
-                            className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-colors cursor-pointer ${
-                              isSelected
-                                ? 'bg-red-50 text-red-700 font-semibold'
-                                : 'hover:bg-gray-50 text-gray-700'
+                            className={`w-full flex items-center justify-between p-2.5 rounded-xl text-left transition-colors ${
+                              isDisabled
+                                ? 'opacity-50 cursor-not-allowed bg-gray-50/50'
+                                : isSelected
+                                ? 'bg-red-50 text-red-700 font-semibold cursor-pointer'
+                                : 'hover:bg-gray-50 text-gray-700 cursor-pointer'
                             }`}
                           >
                             <div className="flex items-center gap-2.5">
                               <img
                                 src={plat.logo}
                                 alt={plat.name}
-                                className="w-5 h-5 object-contain"
+                                className={`w-5 h-5 object-contain ${isDisabled ? 'grayscale-[50%]' : ''}`}
                               />
                               <div className="flex flex-col">
                                 <span className="text-xs font-bold leading-tight">
@@ -319,9 +335,14 @@ const Body = ({
                                 </span>
                               </div>
                             </div>
-                            {isSelected && (
+
+                            {isDisabled ? (
+                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-gray-200/70 text-gray-500 border border-gray-200/80">
+                                Coming Soon
+                              </span>
+                            ) : isSelected ? (
                               <HiCheck className="w-4 h-4 text-red-600" />
-                            )}
+                            ) : null}
                           </button>
                         )
                       })}
