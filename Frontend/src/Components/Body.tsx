@@ -188,7 +188,11 @@ const Body = ({
       }
     } catch (err: any) {
       console.error(err)
-      setError(err.message || 'Could not connect to the backend downloader service.')
+      if (err.name === 'TypeError' && (err.message?.includes('fetch') || err.message?.includes('network'))) {
+        setError('Cannot reach the backend server at http://localhost:5001. Please make sure the backend is running.')
+      } else {
+        setError(err.message || 'Could not connect to the backend downloader service.')
+      }
     } finally {
       setIsProcessing(false)
     }

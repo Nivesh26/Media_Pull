@@ -1,4 +1,5 @@
-import { fetchMediaInfo, streamMediaDownload } from '../services/mediaService.js';
+import fs from 'fs';
+import { fetchMediaInfo, processMediaDownload } from '../services/mediaService.js';
 export const getMediaInfo = async (req, res) => {
     try {
         const { url } = req.body;
@@ -21,50 +22,33 @@ export const downloadMedia = async (req, res) => {
     try {
         const url = req.query.url;
         const format = req.query.format?.toLowerCase() === 'mp4' ? 'mp4' : 'mp3';
-        const quality = req.query.quality || 'best';
+        const quality = req.query.quality || '1080p';
         if (!url) {
             res.status(400).json({ error: 'URL query parameter is required.' });
             return;
         }
-        // Attempt to get title for clean filename
-        let filename = `media_${Date.now()}.${format}`;
-        try {
-            const info = await fetchMediaInfo(url);
-            if (info.title) {
-                // Sanitize filename for safe headers
-                const sanitized = info.title.replace(/[^a-zA-Z0-9_\-\.\s]/g, '').trim().substring(0, 80);
-                if (sanitized) {
-                    filename = `${sanitized}.${format}`;
+        console.log(`Starting media encoding: format=${format}, quality=${quality}, url=${url}`);
+        // Process using ffmpeg to produce QuickTime/Apple compliant MP3 or MP4
+        const { filePath, filename, contentType } = await processMediaDownload(url, format, quality);
+        console.log(`Media encoding complete: sending ${filename} to client.`);
+        res.setHeader('Content-Type', contentType);
+        res.download(filePath, filename, (err) => {
+            // Clean up the temporary file immediately after sending
+            fs.unlink(filePath, () => { });
+            if (err) {
+                if (!res.headersSent) {
+                    res.status(500).json({ error: 'Failed to transmit file to client.' });
                 }
             }
-        }
-        catch {
-            // Fallback filename if fast metadata fails
-        }
-        const contentType = format === 'mp3' ? 'audio/mpeg' : 'video/mp4';
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-        res.setHeader('Content-Type', contentType);
-        const downloadStream = streamMediaDownload(url, format, quality);
-        downloadStream.stdout.pipe(res);
-        downloadStream.stderr.on('data', (data) => {
-            // Log progress / debug info
-            // console.log(`yt-dlp: ${data}`)
-        });
-        downloadStream.on('error', (err) => {
-            console.error('Stream error:', err);
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Download stream failed.' });
-            }
-        });
-        req.on('close', () => {
-            // If client disconnects / cancels download, kill process
-            downloadStream.kill();
         });
     }
     catch (error) {
-        console.error('Download error:', error);
+        console.error('Download processing error:', error);
         if (!res.headersSent) {
-            res.status(500).json({ error: 'Server error during media download.' });
+            res.status(500).json({
+                error: 'Failed to process media file. Please check the URL and try again.',
+                details: error.message || error,
+            });
         }
     }
 };

@@ -2,6 +2,7 @@ import path from 'path'
 import { spawn } from 'child_process'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
+import ffmpegPath from 'ffmpeg-static'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -21,6 +22,12 @@ function getBinPath(): string {
 }
 
 const BIN_PATH = getBinPath()
+const TEMP_DIR = path.resolve(process.cwd(), 'temp_downloads')
+
+// Ensure temp directory exists
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true })
+}
 
 export interface MediaMetadata {
   title: string
@@ -30,6 +37,12 @@ export interface MediaMetadata {
   views: string
   platform: 'youtube' | 'instagram' | 'tiktok'
   url: string
+}
+
+export interface DownloadResult {
+  filePath: string
+  filename: string
+  contentType: string
 }
 
 function formatDuration(seconds: number): string {
@@ -98,35 +111,86 @@ export async function fetchMediaInfo(url: string): Promise<MediaMetadata> {
   }
 }
 
-export function streamMediaDownload(
+export async function processMediaDownload(
   url: string,
   format: 'mp3' | 'mp4',
-  quality: string = 'best'
-) {
+  quality: string = '1080p'
+): Promise<DownloadResult> {
+  const fileId = `media_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
+  const outputTemplate = path.join(TEMP_DIR, `${fileId}.%(ext)s`)
+
   let args: string[] = []
 
   if (format === 'mp3') {
-    // Stream best audio directly
+    // Extract audio and encode to standard QuickTime/Apple-compatible MP3
     args = [
-      '-f',
-      'ba/b',
-      '-o',
-      '-', // Stream to stdout
+      '-x',
+      '--audio-format',
+      'mp3',
+      '--audio-quality',
+      quality === '320k' ? '0' : '2',
       '--no-playlist',
+      '-o',
+      outputTemplate,
       url,
     ]
   } else {
-    // Stream video directly
-    // If quality is 1080p / 720p / 480p, pick best single stream with audio or fallback to best
+    // QuickTime-compatible MP4: merge best video and audio into standard MP4
+    let heightFilter = ''
+    if (quality === '4K') heightFilter = '[height<=2160]'
+    else if (quality === '1080p') heightFilter = '[height<=1080]'
+    else if (quality === '720p') heightFilter = '[height<=720]'
+    else if (quality === '480p') heightFilter = '[height<=480]'
+
+    const formatFilter = `bestvideo${heightFilter}+bestaudio[ext=m4a]/bestvideo${heightFilter}+bestaudio/best${heightFilter}/best`
+
     args = [
       '-f',
-      'b[ext=mp4]/best[ext=mp4]/best',
-      '-o',
-      '-', // Stream to stdout
+      formatFilter,
+      '--merge-output-format',
+      'mp4',
       '--no-playlist',
+      '-o',
+      outputTemplate,
       url,
     ]
   }
 
-  return spawn(BIN_PATH, args)
+  // Pass ffmpeg location if available
+  if (ffmpegPath) {
+    args.push('--ffmpeg-location', String(ffmpegPath))
+  }
+
+  await executeYtDlp(args)
+
+  // Find the created file in temp directory
+  const files = fs.readdirSync(TEMP_DIR)
+  const generatedFile = files.find((f) => f.startsWith(fileId))
+
+  if (!generatedFile) {
+    throw new Error('Downloaded file could not be found after encoding.')
+  }
+
+  const filePath = path.join(TEMP_DIR, generatedFile)
+
+  // Get clean title for user's download filename
+  let cleanTitle = 'downloaded_media'
+  try {
+    const info = await fetchMediaInfo(url)
+    if (info.title) {
+      cleanTitle = info.title.replace(/[^a-zA-Z0-9_\-\.\s]/g, '').trim().substring(0, 65)
+    }
+  } catch {
+    // Fallback
+  }
+
+  const finalExt = path.extname(generatedFile) || (format === 'mp3' ? '.mp3' : '.mp4')
+  const filename = `${cleanTitle}${finalExt}`
+  const contentType = format === 'mp3' ? 'audio/mpeg' : 'video/mp4'
+
+  return {
+    filePath,
+    filename,
+    contentType,
+  }
 }
