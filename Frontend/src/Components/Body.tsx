@@ -4,7 +4,6 @@ import {
   HiXMark,
   HiFilm,
   HiMusicalNote,
-  HiCheckCircle,
   HiArrowPath,
   HiExclamationTriangle,
   HiChevronDown,
@@ -48,10 +47,8 @@ const platforms: PlatformInfo[] = [
     id: 'tiktok',
     name: 'TikTok',
     logo: tiktokLogo,
-    placeholder: 'TikTok support coming soon...',
+    placeholder: 'Paste TikTok video link here...',
     badge: 'No Watermark',
-    disabled: true,
-    statusBadge: 'Coming Soon',
   },
 ]
 
@@ -78,15 +75,27 @@ const Body = ({
   const [selectedPlatform, setSelectedPlatform] = useState<Platform>('youtube')
   const [platformDropdownOpen, setPlatformDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const progressIntervalRef = useRef<any>(null)
 
   const currentMediaType = controlledMediaType ?? internalMediaType
   const [selectedQuality, setSelectedQuality] = useState('320k')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
+  const [downloadError, setDownloadError] = useState<string | null>(null)
   const [videoData, setVideoData] = useState<VideoMetadata | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const activePlatformInfo = platforms.find((p) => p.id === selectedPlatform) || platforms[0]
+
+  // Cleanup in-flight download on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) abortControllerRef.current.abort()
+      if (progressIntervalRef.current) clearInterval(progressIntervalRef.current)
+    }
+  }, [])
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -99,15 +108,36 @@ const Body = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Keep YouTube active and warn if user enters Instagram/TikTok for now
+  // Auto-detect platform from URL and keep Instagram as coming soon
   useEffect(() => {
     const trimmed = url.toLowerCase().trim()
-    if (trimmed.includes('instagram.com') || trimmed.includes('tiktok.com')) {
-      setError('Instagram and TikTok downloads are coming soon! Currently only YouTube is supported.')
+    if (trimmed.includes('tiktok.com') || trimmed.includes('vt.tiktok') || trimmed.includes('vm.tiktok')) {
+      setSelectedPlatform('tiktok')
+      setError(null)
+    } else if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
+      setSelectedPlatform('youtube')
+      setError(null)
+    } else if (trimmed.includes('instagram.com')) {
+      setError('Instagram downloads are coming soon! Currently YouTube and TikTok are supported.')
     }
   }, [url])
 
+  const handleCancelDownload = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+    }
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current)
+      progressIntervalRef.current = null
+    }
+    setIsDownloading(false)
+    setDownloadProgress(null)
+    setDownloadError(null)
+  }
+
   const handleFormatChange = (type: MediaType) => {
+    handleCancelDownload()
     if (onMediaTypeChange) {
       onMediaTypeChange(type)
     } else {
@@ -115,13 +145,18 @@ const Body = ({
     }
     setSelectedQuality(type === 'mp4' ? '1080p' : '320k')
     setDownloadProgress(null)
+    setDownloadError(null)
+    setIsDownloading(false)
   }
 
   // Keep quality preset in sync if parent changes mediaType
   useEffect(() => {
     if (controlledMediaType) {
+      handleCancelDownload()
       setSelectedQuality(controlledMediaType === 'mp4' ? '1080p' : '320k')
       setDownloadProgress(null)
+      setDownloadError(null)
+      setIsDownloading(false)
     }
   }, [controlledMediaType])
 
@@ -152,22 +187,31 @@ const Body = ({
     const trimmed = url.trim().toLowerCase()
     const isYouTube = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)/i.test(trimmed) || trimmed.includes('youtube')
     const isInstagram = trimmed.includes('instagram.com')
-    const isTikTok = trimmed.includes('tiktok.com')
+    const isTikTok = trimmed.includes('tiktok.com') || trimmed.includes('vt.tiktok') || trimmed.includes('vm.tiktok')
 
-    if (isInstagram || isTikTok) {
-      setError('Instagram & TikTok downloads are coming soon! Currently, only YouTube is supported.')
+    if (isInstagram) {
+      setError('Instagram downloads are coming soon! Currently YouTube and TikTok are supported.')
       return
     }
 
-    if (!isYouTube) {
-      setError('Please enter a valid YouTube video or Shorts link.')
+    if (!isYouTube && !isTikTok) {
+      setError('Please enter a valid YouTube or TikTok video link.')
       return
     }
 
+    if (isTikTok) {
+      setSelectedPlatform('tiktok')
+    } else if (isYouTube) {
+      setSelectedPlatform('youtube')
+    }
+
+    handleCancelDownload()
     setError(null)
     setIsProcessing(true)
     setVideoData(null)
     setDownloadProgress(null)
+    setDownloadError(null)
+    setIsDownloading(false)
 
     try {
       const response = await fetch(`${API_BASE}/info`, {
@@ -198,28 +242,84 @@ const Body = ({
     }
   }
 
-  const handleStartDownload = () => {
-    setDownloadProgress(0)
+  const handleStartDownload = async () => {
+    if (!videoData || isDownloading) return
 
-    // Trigger direct stream download to browser / PC
-    const downloadUrl = `${API_BASE}/download?url=${encodeURIComponent(url)}&format=${currentMediaType}&quality=${selectedQuality}`
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    link.setAttribute('download', '')
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    handleCancelDownload()
 
-    const interval = setInterval(() => {
-      setDownloadProgress((prev) => {
-        if (prev === null) return 0
-        if (prev >= 100) {
-          clearInterval(interval)
-          return 100
+    const abortController = new AbortController()
+    abortControllerRef.current = abortController
+
+    setIsDownloading(true)
+    setDownloadProgress(8)
+    setDownloadError(null)
+
+    let currentP = 8
+    progressIntervalRef.current = setInterval(() => {
+      currentP += Math.floor(Math.random() * 3) + 2
+      if (currentP >= 92) {
+        currentP = 92
+      }
+      setDownloadProgress(currentP)
+    }, 400)
+
+    try {
+      const downloadUrl = `${API_BASE}/download?url=${encodeURIComponent(url)}&format=${currentMediaType}&quality=${selectedQuality}`
+      const response = await fetch(downloadUrl, { signal: abortController.signal })
+
+      if (!response.ok) {
+        let errMessage = 'Download failed. Please check the video link.'
+        try {
+          const errJson = await response.json()
+          if (errJson.error) errMessage = errJson.error
+        } catch {
+          // ignore
         }
-        return prev + 25
-      })
-    }, 450)
+        throw new Error(errMessage)
+      }
+
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+        progressIntervalRef.current = null
+      }
+      setDownloadProgress(100)
+
+      const blob = await response.blob()
+
+      let filename = `${videoData.title.replace(/[^a-zA-Z0-9_\-\.\s]/g, '').trim().substring(0, 50) || 'media'}.${currentMediaType}`
+      const disposition = response.headers.get('content-disposition')
+      if (disposition && disposition.includes('filename=')) {
+        const matches = disposition.match(/filename="?([^";]+)"?/)
+        if (matches && matches[1]) {
+          filename = matches[1].replace(/['"]/g, '')
+        }
+      }
+
+      // Trigger standard browser file save to user's PC
+      const blobUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(blobUrl)
+
+      setDownloadProgress(100)
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        return
+      }
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current)
+        progressIntervalRef.current = null
+      }
+      setDownloadProgress(null)
+      setDownloadError(err.message || 'Failed to download media file. Please check backend connection.')
+    } finally {
+      setIsDownloading(false)
+      abortControllerRef.current = null
+    }
   }
 
   return (
@@ -494,36 +594,98 @@ const Body = ({
                 </div>
 
                 <div className="w-full sm:w-auto shrink-0">
-                  {downloadProgress === null ? (
+                  {isDownloading ? (
+                    <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                      {/* Vertical Liquid Loading Pill Button */}
+                      <div className="relative overflow-hidden w-full sm:w-52 h-12 rounded-full bg-slate-900 border-2 border-emerald-400 shadow-lg shadow-emerald-500/20 flex items-center justify-center select-none">
+                        {/* Top glass specular glare */}
+                        <div className="absolute top-1 left-4 right-4 h-[2px] bg-gradient-to-r from-transparent via-white/50 to-transparent rounded-full pointer-events-none z-30" />
+
+                        {/* Liquid Rising Vertically from Bottom to Top */}
+                        <div
+                          className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400 transition-all duration-300 ease-out"
+                          style={{ height: `${downloadProgress || 12}%` }}
+                        >
+                          {/* Liquid Surface Water Wave 1 (Back Layer) */}
+                          <div className="absolute -top-3.5 left-0 w-[200%] h-4 overflow-visible pointer-events-none animate-wave-slow opacity-60">
+                            <svg viewBox="0 0 1000 40" preserveAspectRatio="none" className="w-full h-full text-emerald-300 fill-current">
+                              <path d="M0,20 Q125,5 250,20 T500,20 T750,20 T1000,20 L1000,40 L0,40 Z" />
+                            </svg>
+                          </div>
+
+                          {/* Liquid Surface Water Wave 2 (Front Layer) */}
+                          <div className="absolute -top-3 left-0 w-[200%] h-4 overflow-visible pointer-events-none animate-wave-fast opacity-95">
+                            <svg viewBox="0 0 1000 40" preserveAspectRatio="none" className="w-full h-full text-emerald-400 fill-current">
+                              <path d="M0,20 Q125,35 250,20 T500,20 T750,20 T1000,20 L1000,40 L0,40 Z" />
+                            </svg>
+                          </div>
+
+                          {/* Rising Liquid Bubbles */}
+                          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                            <div className="liquid-bubble w-2 h-2 left-[15%] bottom-1 animate-bubble-1" style={{ animationDelay: '0s' }} />
+                            <div className="liquid-bubble w-1.5 h-1.5 left-[30%] bottom-0.5 animate-bubble-2" style={{ animationDelay: '0.6s' }} />
+                            <div className="liquid-bubble w-2.5 h-2.5 left-[48%] bottom-1 animate-bubble-3" style={{ animationDelay: '1.1s' }} />
+                            <div className="liquid-bubble w-1.5 h-1.5 left-[65%] bottom-0.5 animate-bubble-1" style={{ animationDelay: '1.7s' }} />
+                            <div className="liquid-bubble w-2 h-2 left-[82%] bottom-1 animate-bubble-2" style={{ animationDelay: '0.4s' }} />
+                          </div>
+                        </div>
+
+                        {/* Centered Percentage Text */}
+                        <div className="relative z-20 flex items-center justify-center gap-2 text-white font-extrabold text-base tracking-wide drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]">
+                          <HiArrowPath className="w-4 h-4 animate-spin text-white drop-shadow-[0_0_6px_rgba(52,211,153,0.9)] shrink-0" />
+                          <span className="font-mono">{downloadProgress}%</span>
+                        </div>
+                      </div>
+
+                      {/* Cancel Button */}
+                      <button
+                        type="button"
+                        onClick={handleCancelDownload}
+                        title="Cancel download"
+                        className="flex items-center justify-center gap-1.5 px-4 h-12 rounded-full bg-gray-100 hover:bg-red-50 hover:text-red-600 active:bg-red-100 text-gray-600 font-semibold text-xs sm:text-sm transition-all duration-150 cursor-pointer border border-gray-200/80 hover:border-red-200 shrink-0"
+                      >
+                        <HiXMark className="w-4 h-4" />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
+                  ) : downloadProgress === 100 ? (
                     <button
                       type="button"
                       onClick={handleStartDownload}
-                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm shadow-sm transition-colors cursor-pointer"
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 h-12 rounded-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-500/25 border-2 border-emerald-400 transition-all duration-200 cursor-pointer"
+                    >
+                      <HiCheck className="w-4 h-4" />
+                      <span>Download Again</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleStartDownload}
+                      className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 h-12 rounded-full bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-sm shadow-sm transition-all duration-200 cursor-pointer hover:shadow-md hover:shadow-emerald-600/20"
                     >
                       <HiArrowDownTray className="w-4 h-4" />
                       <span>Download Now</span>
                     </button>
-                  ) : downloadProgress < 100 ? (
-                    <div className="w-full sm:w-40 space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold text-gray-700">
-                        <span>Converting...</span>
-                        <span>{downloadProgress}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-emerald-500 h-2 rounded-full transition-all duration-300"
-                          style={{ width: `${downloadProgress}%` }}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-emerald-600 font-semibold text-sm bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200">
-                      <HiCheckCircle className="w-5 h-5" />
-                      <span>Completed!</span>
-                    </div>
                   )}
                 </div>
               </div>
+
+              {/* Compact error alert if download failed */}
+              {downloadError && (
+                <div className="mt-3 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center justify-between gap-3 animate-fade-in">
+                  <div className="flex items-center gap-2">
+                    <HiExclamationTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                    <span>{downloadError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStartDownload}
+                    className="font-bold underline hover:no-underline shrink-0 cursor-pointer"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
