@@ -100,9 +100,16 @@ export async function fetchMediaInfo(url: string): Promise<MediaMetadata> {
   const output = await executeYtDlp(['--dump-json', '--no-playlist', url])
   const data = JSON.parse(output)
 
+  const rawTitle = data.title || data.description || ''
+  const cleanTitle = rawTitle
+    ? rawTitle.split('\n')[0].substring(0, 75).trim()
+    : platform === 'instagram'
+    ? 'Instagram Reel'
+    : 'Untitled Media'
+
   return {
-    title: data.title || 'Untitled Media',
-    channel: data.uploader || data.channel || data.creator || 'Unknown Creator',
+    title: cleanTitle,
+    channel: data.uploader || data.channel || data.creator || data.uploader_id || (platform === 'instagram' ? 'Instagram Creator' : 'Unknown Creator'),
     duration: formatDuration(data.duration),
     thumbnail: data.thumbnail || (data.thumbnails && data.thumbnails[0]?.url) || '',
     views: formatViews(data.view_count),

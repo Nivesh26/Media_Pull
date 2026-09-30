@@ -38,10 +38,8 @@ const platforms: PlatformInfo[] = [
     id: 'instagram',
     name: 'Instagram',
     logo: instagramLogo,
-    placeholder: 'Instagram support coming soon...',
+    placeholder: 'Paste Instagram Reel or Post link here...',
     badge: 'Reels & Stories',
-    disabled: true,
-    statusBadge: 'Coming Soon',
   },
   {
     id: 'tiktok',
@@ -108,17 +106,18 @@ const Body = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Auto-detect platform from URL and keep Instagram as coming soon
+  // Auto-detect platform from URL
   useEffect(() => {
     const trimmed = url.toLowerCase().trim()
     if (trimmed.includes('tiktok.com') || trimmed.includes('vt.tiktok') || trimmed.includes('vm.tiktok')) {
       setSelectedPlatform('tiktok')
       setError(null)
+    } else if (trimmed.includes('instagram.com')) {
+      setSelectedPlatform('instagram')
+      setError(null)
     } else if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
       setSelectedPlatform('youtube')
       setError(null)
-    } else if (trimmed.includes('instagram.com')) {
-      setError('Instagram downloads are coming soon! Currently YouTube and TikTok are supported.')
     }
   }, [url])
 
@@ -189,17 +188,14 @@ const Body = ({
     const isInstagram = trimmed.includes('instagram.com')
     const isTikTok = trimmed.includes('tiktok.com') || trimmed.includes('vt.tiktok') || trimmed.includes('vm.tiktok')
 
+    if (!isYouTube && !isTikTok && !isInstagram) {
+      setError('Please enter a valid YouTube, TikTok, or Instagram link.')
+      return
+    }
+
     if (isInstagram) {
-      setError('Instagram downloads are coming soon! Currently YouTube and TikTok are supported.')
-      return
-    }
-
-    if (!isYouTube && !isTikTok) {
-      setError('Please enter a valid YouTube or TikTok video link.')
-      return
-    }
-
-    if (isTikTok) {
+      setSelectedPlatform('instagram')
+    } else if (isTikTok) {
       setSelectedPlatform('tiktok')
     } else if (isYouTube) {
       setSelectedPlatform('youtube')
